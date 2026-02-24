@@ -49,7 +49,7 @@ graph TB
     end
 
     subgraph NextJS["Next.js Server — API Routes"]
-        AUTH[NextAuth v5<br/>JWT Strategy]
+        AUTH["NextAuth v5 (JWT)"]
         EMAIL_API[Email APIs]
         AGENT_API[Agent APIs]
         ACCOUNT_API[Account APIs]
@@ -62,9 +62,9 @@ graph TB
     end
 
     subgraph Providers["External Providers"]
-        GMAIL[Gmail API<br/>googleapis]
-        OUTLOOK[Microsoft Graph API<br/>@azure/msal-node]
-        OPENAI[OpenAI API<br/>GPT-4o-mini]
+        GMAIL["Gmail API (googleapis)"]
+        OUTLOOK["MS Graph API (msal-node)"]
+        OPENAI["OpenAI API (GPT-4o-mini)"]
     end
 
     subgraph Data["Data Layer"]
@@ -122,7 +122,7 @@ flowchart LR
     AGENT -->|Batch Classify| OPENAI_API[OpenAI GPT-4o-mini]
     AGENT -->|Store Results| DB
 
-    RENDER_CRON[Render Cron<br/>Daily 8 AM UTC] -->|POST /api/agent/cron| SERVER
+    RENDER_CRON["Render Cron (Daily 8 AM UTC)"] -->|POST /api/agent/cron| SERVER
 ```
 
 ---
@@ -134,7 +134,7 @@ sequenceDiagram
     participant U as User
     participant B as Browser
     participant NA as NextAuth v5
-    participant P as OAuth Provider<br/>(Google / Microsoft)
+    participant P as OAuth Provider
     participant DB as PostgreSQL
 
     U->>B: Click "Sign in with Google/Outlook"
@@ -153,7 +153,7 @@ sequenceDiagram
     NA->>B: Set JWT session cookie
     B->>U: Redirect to Dashboard
 
-    Note over NA,DB: JWT contains accessToken,<br/>refreshToken, provider, expiresAt
+    Note over NA,DB: JWT contains accessToken, refreshToken, provider, expiresAt
 ```
 
 ---
@@ -162,11 +162,11 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    START([Start Sync]) --> FETCH_ACCOUNTS[Fetch all active<br/>EmailAccounts for user]
+    START([Start Sync]) --> FETCH_ACCOUNTS["Fetch all active EmailAccounts"]
     FETCH_ACCOUNTS --> LOOP{For each account}
 
-    LOOP --> CHECK_TOKEN{Token expires<br/>within 5 min?}
-    CHECK_TOKEN -->|Yes| REFRESH[Refresh OAuth token<br/>via provider API]
+    LOOP --> CHECK_TOKEN{"Token expires within 5 min?"}
+    CHECK_TOKEN -->|Yes| REFRESH["Refresh OAuth token via provider API"]
     REFRESH --> UPDATE_TOKEN[Store new token in DB]
     UPDATE_TOKEN --> HAS_CURSOR{Has sync cursor?}
     CHECK_TOKEN -->|No| HAS_CURSOR
@@ -175,27 +175,27 @@ flowchart TD
     HAS_CURSOR -->|No| FULL[Full Sync — Last 30 days]
 
     subgraph Gmail["Gmail Provider"]
-        INCREMENTAL --> G_HIST[history.list<br/>startHistoryId]
-        FULL --> G_LIST[messages.list<br/>after:30d filter]
-        G_HIST --> G_GET[messages.get<br/>format: full]
+        INCREMENTAL --> G_HIST["history.list with startHistoryId"]
+        FULL --> G_LIST["messages.list with 30d filter"]
+        G_HIST --> G_GET["messages.get format: full"]
         G_LIST --> G_GET
     end
 
     subgraph Outlook["Outlook Provider"]
-        INCREMENTAL --> O_DELTA[/messages/delta<br/>deltaLink]
-        FULL --> O_FULL[/messages/delta<br/>receivedDateTime filter]
-        O_DELTA --> O_PAGE[Paginate via<br/>@odata.nextLink]
+        INCREMENTAL --> O_DELTA["messages/delta with deltaLink"]
+        FULL --> O_FULL["messages/delta with date filter"]
+        O_DELTA --> O_PAGE["Paginate via nextLink"]
         O_FULL --> O_PAGE
     end
 
-    G_GET --> NORMALIZE[Normalize to<br/>NormalizedEmail format]
+    G_GET --> NORMALIZE["Normalize to NormalizedEmail format"]
     O_PAGE --> NORMALIZE
 
-    NORMALIZE --> UPSERT[Upsert emails to DB<br/>accountId + externalId]
-    UPSERT --> UPDATE_CURSOR[Update sync cursor<br/>and lastSyncAt]
+    NORMALIZE --> UPSERT["Upsert emails to DB (accountId + externalId)"]
+    UPSERT --> UPDATE_CURSOR["Update sync cursor and lastSyncAt"]
     UPDATE_CURSOR --> LOOP
 
-    LOOP -->|All done| RESULT([Return SyncResult<br/>totalFetched, errors])
+    LOOP -->|All done| RESULT(["Return SyncResult (totalFetched, errors)"])
 ```
 
 ---
@@ -204,22 +204,22 @@ flowchart TD
 
 ```mermaid
 flowchart TD
-    START([Classify Emails]) --> QUERY[Query unclassified emails<br/>max 500 — newest first]
-    QUERY --> TRANSFORM[Transform to<br/>ClassificationInput]
-    TRANSFORM --> BATCH[Split into batches<br/>of 15 emails]
-    BATCH --> API_CALL[Send batch to<br/>OpenAI GPT-4o-mini]
+    START([Classify Emails]) --> QUERY["Query unclassified emails (max 500)"]
+    QUERY --> TRANSFORM["Transform to ClassificationInput"]
+    TRANSFORM --> BATCH["Split into batches of 15 emails"]
+    BATCH --> API_CALL["Send batch to OpenAI GPT-4o-mini"]
 
-    API_CALL --> PARSE{Parse JSON<br/>response}
-    PARSE -->|Success| CHECK_CONF{Confidence<br/>>= 0.7?}
-    PARSE -->|Fail| RETRY{Retries left?}
-    RETRY -->|Yes| BACKOFF[Exponential backoff<br/>2s then 4s then 8s]
+    API_CALL --> PARSE{"Parse JSON response"}
+    PARSE -->|Success| CHECK_CONF{"Confidence >= 0.7?"}
+    PARSE -->|Fail| RETRY{"Retries left?"}
+    RETRY -->|Yes| BACKOFF["Exponential backoff (2s, 4s, 8s)"]
     BACKOFF --> API_CALL
     RETRY -->|No| SKIP[Skip batch]
 
-    CHECK_CONF -->|Yes| STORE[Upsert Classification<br/>to database]
-    CHECK_CONF -->|No| RECLASS[Re-classify with<br/>full body text]
+    CHECK_CONF -->|Yes| STORE["Upsert Classification to database"]
+    CHECK_CONF -->|No| RECLASS["Re-classify with full body text"]
 
-    RECLASS --> API_CALL_2[Send to OpenAI<br/>with full context]
+    RECLASS --> API_CALL_2["Send to OpenAI with full context"]
     API_CALL_2 --> STORE
 
     STORE --> NEXT{More batches?}
@@ -423,32 +423,32 @@ erDiagram
 
 ```mermaid
 graph TD
-    ROOT[RootLayout<br/>globals.css + fonts]
-    ROOT --> PROVIDERS[Providers<br/>SessionProvider + QueryClient + Toaster]
+    ROOT["RootLayout (globals.css + fonts)"]
+    ROOT --> PROVIDERS["Providers (Session + Query + Toaster)"]
 
     PROVIDERS --> AUTH_LAYOUT["Auth Layout — /login"]
     PROVIDERS --> DASH_LAYOUT["Dashboard Layout — Protected"]
 
-    AUTH_LAYOUT --> LOGIN[LoginPage<br/>Google + Microsoft OAuth buttons]
+    AUTH_LAYOUT --> LOGIN["LoginPage (Google + Microsoft OAuth)"]
 
-    DASH_LAYOUT --> SIDEBAR[Sidebar<br/>Logo + Nav links]
-    DASH_LAYOUT --> HEADER[Header<br/>Analyze Now + User menu]
+    DASH_LAYOUT --> SIDEBAR["Sidebar (Logo + Nav links)"]
+    DASH_LAYOUT --> HEADER["Header (Analyze Now + User menu)"]
     DASH_LAYOUT --> MAIN[Main Content Area]
 
     MAIN --> INBOX["InboxPage — /"]
     MAIN --> SETTINGS["SettingsPage — /settings"]
 
-    INBOX --> SUMMARY[SummaryCards<br/>Needs Reply / Approval / Threads / Unclassified]
-    INBOX --> FILTER[FilterBar<br/>Search / Category / Account / Priority pills]
-    INBOX --> LIST[EmailList<br/>Virtualized scrollable list]
-    INBOX --> DETAIL[EmailDetail<br/>Split-pane view]
+    INBOX --> SUMMARY["SummaryCards (Reply / Approval / Threads / Unclassified)"]
+    INBOX --> FILTER["FilterBar (Search / Category / Priority)"]
+    INBOX --> LIST["EmailList (Virtualized scrollable)"]
+    INBOX --> DETAIL["EmailDetail (Split-pane view)"]
 
-    DETAIL --> THREAD[ThreadChain<br/>Conversation history]
-    DETAIL --> ACTIONS[Action Items<br/>Checkboxes + due dates]
-    DETAIL --> IFRAME[Email Body<br/>Sandboxed iframe]
+    DETAIL --> THREAD["ThreadChain (Conversation history)"]
+    DETAIL --> ACTIONS["Action Items (Checkboxes + due dates)"]
+    DETAIL --> IFRAME["Email Body (Sandboxed iframe)"]
 
-    SETTINGS --> ACCOUNTS_LIST[Connected Accounts<br/>List with sync status]
-    SETTINGS --> ADD_ACCOUNT[Add Account<br/>Google / Microsoft buttons]
+    SETTINGS --> ACCOUNTS_LIST["Connected Accounts (sync status)"]
+    SETTINGS --> ADD_ACCOUNT["Add Account (Google / Microsoft)"]
 ```
 
 ---
@@ -491,23 +491,33 @@ graph TD
 ```mermaid
 graph LR
     subgraph P1["P1 — Immediate"]
-        P1D["Direct asks requiring action within 24h<br/>Blocked items and deadline-today tasks<br/>Urgent escalations and ASAP requests"]
+        P1A["Direct asks requiring action within 24h"]
+        P1B["Blocked items, deadline-today tasks"]
+        P1C["Urgent escalations, ASAP requests"]
     end
 
     subgraph P2["P2 — Important"]
-        P2D["Project updates needing response<br/>Meeting invites and schedule changes<br/>Financial, legal, and compliance matters"]
+        P2A["Project updates needing response"]
+        P2B["Meeting invites and schedule changes"]
+        P2C["Financial, legal, compliance matters"]
     end
 
     subgraph P3["P3 — Moderate"]
-        P3D["CC'd conversations needing input<br/>Relevant industry newsletters<br/>Non-urgent requests and acknowledgments"]
+        P3A["CC'd conversations needing input"]
+        P3B["Relevant industry newsletters"]
+        P3C["Non-urgent requests, acknowledgments"]
     end
 
     subgraph P4["P4 — Low"]
-        P4D["FYI-only messages<br/>CI/CD and monitoring notifications<br/>Receipts, confirmations, and reminders"]
+        P4A["FYI-only messages"]
+        P4B["CI/CD and monitoring notifications"]
+        P4C["Receipts, confirmations, reminders"]
     end
 
     subgraph P5["P5 — Noise"]
-        P5D["Marketing and promotions<br/>Mass-sent newsletters<br/>Social notifications and spam"]
+        P5A["Marketing and promotions"]
+        P5B["Mass-sent newsletters"]
+        P5C["Social notifications, spam"]
     end
 ```
 
