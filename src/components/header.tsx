@@ -30,6 +30,7 @@ import {
   useAgentRun,
   useAgentRunStatus,
   useAgentRuns,
+  useAutoSync,
 } from "@/hooks/use-agent";
 import { formatDistanceToNow } from "date-fns";
 
@@ -38,6 +39,7 @@ export function Header() {
   const queryClient = useQueryClient();
   const agentRun = useAgentRun();
   const { data: runs } = useAgentRuns();
+  useAutoSync();
   const [activeRunId, setActiveRunId] = useState<string | null>(null);
   const { data: runStatus } = useAgentRunStatus(activeRunId);
 

@@ -43,7 +43,8 @@ async function ensureValidToken(
 }
 
 export async function syncEmailAccount(
-  emailAccountId: string
+  emailAccountId: string,
+  forceFullSync = false
 ): Promise<{ fetched: number; errors: number }> {
   const account = await prisma.emailAccount.findUnique({
     where: { id: emailAccountId },
@@ -66,12 +67,14 @@ export async function syncEmailAccount(
   let emails: NormalizedEmail[] = [];
   let newSyncCursor: string | undefined;
 
+  console.log(`[Sync] Fetching emails for ${account.provider} account ${account.email}...`);
+
   try {
     if (account.provider === "gmail") {
       const result = await fetchGmailEmails(
         validToken,
         account.refreshToken,
-        account.syncCursor
+        forceFullSync ? null : account.syncCursor
       );
       emails = result.emails;
       newSyncCursor = result.newSyncCursor;
@@ -79,13 +82,14 @@ export async function syncEmailAccount(
       const result = await fetchOutlookEmails(
         validToken,
         account.refreshToken,
-        account.syncCursor
+        forceFullSync ? null : account.syncCursor
       );
       emails = result.emails;
       newSyncCursor = result.newSyncCursor;
     }
+    console.log(`[Sync] Fetched ${emails.length} emails from ${account.provider}`);
   } catch (error) {
-    console.error(`Failed to fetch emails for account ${emailAccountId}:`, error);
+    console.error(`[Sync] Failed to fetch emails for ${account.email}:`, error);
     return { fetched: 0, errors: 1 };
   }
 
@@ -117,11 +121,13 @@ export async function syncEmailAccount(
           receivedAt: email.receivedAt,
           isRead: email.isRead,
           hasAttachments: email.hasAttachments,
+          attachments: email.attachments ? (email.attachments as object[]) : undefined,
           labels: email.labels,
         },
         update: {
           isRead: email.isRead,
           labels: email.labels,
+          receivedAt: email.receivedAt,
         },
       });
       stored++;
@@ -144,7 +150,8 @@ export async function syncEmailAccount(
 }
 
 export async function syncAllAccounts(
-  userId: string
+  userId: string,
+  forceFullSync = false
 ): Promise<{ totalFetched: number; totalErrors: number; accountResults: Record<string, { fetched: number; errors: number }> }> {
   const accounts = await prisma.emailAccount.findMany({
     where: { userId, isActive: true },
@@ -156,7 +163,7 @@ export async function syncAllAccounts(
 
   for (const account of accounts) {
     try {
-      const result = await syncEmailAccount(account.id);
+      const result = await syncEmailAccount(account.id, forceFullSync);
       totalFetched += result.fetched;
       totalErrors += result.errors;
       accountResults[account.email] = result;

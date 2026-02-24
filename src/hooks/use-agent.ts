@@ -1,5 +1,6 @@
 "use client";
 
+import { useEffect, useRef } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AgentRunStatus } from "@/types";
@@ -47,6 +48,75 @@ export function useAgentRuns() {
       const res = await fetch("/api/agent/run");
       if (!res.ok) throw new Error("Failed to fetch agent runs");
       return res.json();
+    },
+  });
+}
+
+// Module-level lock shared between auto-sync and manual sync
+let syncLock = false;
+
+const SYNC_INTERVAL_MS = 5 * 60 * 1000; // 5 minutes
+
+export function useAutoSync() {
+  const queryClient = useQueryClient();
+
+  useEffect(() => {
+    const sync = async () => {
+      if (syncLock) return;
+      syncLock = true;
+      try {
+        const res = await fetch("/api/accounts/sync", { method: "POST" });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.totalFetched > 0) {
+            queryClient.invalidateQueries({ queryKey: ["emails"] });
+          }
+        }
+      } catch {
+        // Silent fail — background sync shouldn't disrupt the user
+      } finally {
+        syncLock = false;
+      }
+    };
+
+    const id = setInterval(sync, SYNC_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [queryClient]);
+}
+
+export function useManualSync() {
+  const queryClient = useQueryClient();
+
+  return useMutation<{ totalFetched: number }, Error, { forceFullSync?: boolean } | void>({
+    mutationFn: async (params) => {
+      if (syncLock) throw new Error("Sync already in progress");
+      syncLock = true;
+      try {
+        const res = await fetch("/api/accounts/sync", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ forceFullSync: params?.forceFullSync ?? false }),
+        });
+        if (!res.ok) throw new Error("Failed to sync");
+        return res.json();
+      } finally {
+        syncLock = false;
+      }
+    },
+    onSuccess: (data) => {
+      queryClient.invalidateQueries({ queryKey: ["emails"] });
+      if (data.totalFetched > 0) {
+        toast.success(`Fetched ${data.totalFetched} new email${data.totalFetched === 1 ? "" : "s"}`);
+      } else {
+        toast.success("Inbox is up to date");
+      }
+    },
+    onError: (error) => {
+      if (error.message === "Sync already in progress") {
+        toast.info("Sync already in progress");
+      } else {
+        toast.error("Failed to fetch latest emails");
+      }
     },
   });
 }

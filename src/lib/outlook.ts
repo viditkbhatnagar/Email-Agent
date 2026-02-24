@@ -1,6 +1,6 @@
 import { ConfidentialClientApplication } from "@azure/msal-node";
 import { Client } from "@microsoft/microsoft-graph-client";
-import type { NormalizedEmail, SyncResult } from "@/types";
+import type { NormalizedEmail, SyncResult, AttachmentMeta } from "@/types";
 
 let msalClient: ConfidentialClientApplication | null = null;
 
@@ -66,6 +66,11 @@ interface GraphMessage {
   isRead?: boolean;
   hasAttachments?: boolean;
   categories?: string[];
+  attachments?: Array<{
+    name?: string;
+    contentType?: string;
+    size?: number;
+  }>;
 }
 
 interface GraphDeltaResponse {
@@ -75,6 +80,13 @@ interface GraphDeltaResponse {
 }
 
 function normalizeOutlookMessage(msg: GraphMessage): NormalizedEmail {
+  const attachments: AttachmentMeta[] | undefined = msg.attachments
+    ?.map((a) => ({
+      filename: a.name || "unknown",
+      mimeType: a.contentType || "application/octet-stream",
+      size: a.size,
+    }));
+
   return {
     externalId: msg.id,
     threadId: msg.conversationId,
@@ -97,7 +109,8 @@ function normalizeOutlookMessage(msg: GraphMessage): NormalizedEmail {
       : new Date(),
     isRead: msg.isRead ?? false,
     hasAttachments: msg.hasAttachments ?? false,
-    labels: msg.categories ?? [],
+    attachments: attachments && attachments.length > 0 ? attachments : undefined,
+    labels: ["INBOX", ...(msg.categories ?? [])],
   };
 }
 
@@ -154,7 +167,7 @@ export async function fetchOutlookEmails(
   ).toISOString();
 
   let nextLink: string | undefined =
-    `/me/mailFolders/inbox/messages/delta?$filter=receivedDateTime ge ${thirtyDaysAgo}&$select=id,conversationId,from,toRecipients,ccRecipients,subject,bodyPreview,body,receivedDateTime,isRead,hasAttachments,categories&$top=50`;
+    `/me/mailFolders/inbox/messages/delta?$filter=receivedDateTime ge ${thirtyDaysAgo}&$select=id,conversationId,from,toRecipients,ccRecipients,subject,bodyPreview,body,receivedDateTime,isRead,hasAttachments,categories&$expand=attachments($select=name,contentType,size)&$top=50`;
   let deltaLink: string | undefined;
 
   while (nextLink) {

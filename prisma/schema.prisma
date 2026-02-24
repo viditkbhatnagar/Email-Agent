@@ -101,6 +101,7 @@ model Email {
   receivedAt     DateTime
   isRead         Boolean         @default(false)
   hasAttachments Boolean         @default(false)
+  attachments    Json?           // [{filename, mimeType, size}]
   labels         String[]
   classification Classification?
   drafts         Draft[]

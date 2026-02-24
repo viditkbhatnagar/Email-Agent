@@ -6,11 +6,13 @@ import { Skeleton } from "@/components/ui/skeleton";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { Badge } from "@/components/ui/badge";
 import { Paperclip } from "lucide-react";
+import { categoryColors } from "@/lib/category-colors";
 
 interface EmailItem {
   id: string;
   from: string;
   fromName: string | null;
+  to?: string[];
   subject: string;
   snippet: string | null;
   receivedAt: string;
@@ -34,6 +36,10 @@ interface EmailListProps {
   selectedId?: string;
   onSelect: (id: string) => void;
   isLoading?: boolean;
+  hasMore?: boolean;
+  isLoadingMore?: boolean;
+  onLoadMore?: () => void;
+  folder?: "inbox" | "sent";
 }
 
 const priorityColors: Record<number, string> = {
@@ -49,6 +55,10 @@ export function EmailList({
   selectedId,
   onSelect,
   isLoading,
+  hasMore,
+  isLoadingMore,
+  onLoadMore,
+  folder = "inbox",
 }: EmailListProps) {
   if (isLoading) {
     return (
@@ -71,8 +81,14 @@ export function EmailList({
     return (
       <div className="flex flex-col items-center justify-center py-16 text-muted-foreground">
         <Inbox className="h-12 w-12 mb-3 opacity-30" />
-        <p className="text-sm font-medium">No emails yet</p>
-        <p className="text-xs mt-1">Connect an account in Settings to get started</p>
+        <p className="text-sm font-medium">
+          {folder === "sent" ? "No sent emails" : "No emails yet"}
+        </p>
+        <p className="text-xs mt-1">
+          {folder === "sent"
+            ? "Sent emails will appear here"
+            : "Connect an account in Settings to get started"}
+        </p>
       </div>
     );
   }
@@ -106,7 +122,9 @@ export function EmailList({
                     !email.isRead ? "font-semibold" : "font-medium"
                   )}
                 >
-                  {email.fromName || email.from}
+                  {folder === "sent"
+                    ? `To: ${email.to?.[0] ?? "unknown"}`
+                    : email.fromName || email.from}
                 </span>
                 <span className="shrink-0 text-xs text-muted-foreground">
                   {formatDistanceToNow(new Date(email.receivedAt), {
@@ -137,7 +155,13 @@ export function EmailList({
                   {email.account.provider}
                 </span>
                 {email.classification?.category && (
-                  <Badge variant="outline" className="text-[10px] py-0 h-4">
+                  <Badge
+                    variant="outline"
+                    className={cn(
+                      "text-[10px] py-0 h-4",
+                      categoryColors[email.classification.category] ?? ""
+                    )}
+                  >
                     {email.classification.category}
                   </Badge>
                 )}
@@ -155,6 +179,15 @@ export function EmailList({
             </div>
           </button>
         ))}
+        {hasMore && (
+          <button
+            onClick={onLoadMore}
+            disabled={isLoadingMore}
+            className="w-full py-3 text-sm text-muted-foreground hover:text-foreground transition-colors disabled:opacity-50"
+          >
+            {isLoadingMore ? "Loading..." : "Load more emails"}
+          </button>
+        )}
       </div>
     </ScrollArea>
   );

@@ -22,7 +22,11 @@ export async function GET(req: NextRequest) {
     const dateTo = searchParams.get("dateTo");
     const search = searchParams.get("search");
     const actionableOnly = searchParams.get("actionableOnly") === "true";
+    const needsReply = searchParams.get("needsReply") === "true";
+    const needsApproval = searchParams.get("needsApproval") === "true";
+    const isThreadActive = searchParams.get("isThreadActive") === "true";
     const threadId = searchParams.get("threadId");
+    const folder = searchParams.get("folder") ?? "inbox"; // "inbox" | "sent"
     const includeStats = searchParams.get("includeStats") === "true";
 
     const accounts = await prisma.emailAccount.findMany({
@@ -42,8 +46,10 @@ export async function GET(req: NextRequest) {
     }
 
     // Build the where clause
+    const folderLabel = folder === "sent" ? "SENT" : "INBOX";
     const where: Prisma.EmailWhereInput = {
       accountId: accountId ? { equals: accountId } : { in: accountIds },
+      labels: { has: folderLabel },
     };
 
     // Cursor-based pagination
@@ -75,7 +81,7 @@ export async function GET(req: NextRequest) {
     }
 
     // Classification-based filters
-    if (priorityParam || category || actionableOnly) {
+    if (priorityParam || category || actionableOnly || needsReply || needsApproval || isThreadActive) {
       const classificationFilter: Prisma.ClassificationWhereInput = {};
 
       if (priorityParam) {
@@ -90,6 +96,18 @@ export async function GET(req: NextRequest) {
 
       if (category) {
         classificationFilter.category = category;
+      }
+
+      if (needsReply) {
+        classificationFilter.needsReply = true;
+      }
+
+      if (needsApproval) {
+        classificationFilter.needsApproval = true;
+      }
+
+      if (isThreadActive) {
+        classificationFilter.isThreadActive = true;
       }
 
       if (actionableOnly) {
@@ -109,6 +127,7 @@ export async function GET(req: NextRequest) {
           id: true,
           from: true,
           fromName: true,
+          to: true,
           subject: true,
           snippet: true,
           receivedAt: true,
@@ -132,43 +151,36 @@ export async function GET(req: NextRequest) {
         ],
         take: limit,
       }),
-      prisma.email.count({ where: { accountId: { in: accountIds } } }),
+      prisma.email.count({ where: { accountId: { in: accountIds }, labels: { has: folderLabel } } }),
     ]);
-
-    // Sort by priority client-side (emails with classification first sorted by priority, then unclassified)
-    emails.sort((a, b) => {
-      const aPriority = a.classification?.priority ?? 6;
-      const bPriority = b.classification?.priority ?? 6;
-      if (aPriority !== bPriority) return aPriority - bPriority;
-      return new Date(b.receivedAt).getTime() - new Date(a.receivedAt).getTime();
-    });
 
     // Optional stats
     let stats = undefined;
     if (includeStats) {
+      const inboxFilter = { accountId: { in: accountIds }, labels: { has: "INBOX" as string } };
       const [needsReply, needsApproval, activeThreads, unclassified] =
         await Promise.all([
           prisma.classification.count({
             where: {
-              email: { accountId: { in: accountIds } },
+              email: inboxFilter,
               needsReply: true,
             },
           }),
           prisma.classification.count({
             where: {
-              email: { accountId: { in: accountIds } },
+              email: inboxFilter,
               needsApproval: true,
             },
           }),
           prisma.classification.count({
             where: {
-              email: { accountId: { in: accountIds } },
+              email: inboxFilter,
               isThreadActive: true,
             },
           }),
           prisma.email.count({
             where: {
-              accountId: { in: accountIds },
+              ...inboxFilter,
               classification: null,
             },
           }),

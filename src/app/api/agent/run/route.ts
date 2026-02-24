@@ -15,11 +15,24 @@ export async function POST() {
       where: { userId: session.user.id, status: "running" },
     });
     if (existingRun) {
-      return NextResponse.json({
-        runId: existingRun.id,
-        status: "running",
-        message: "A run is already in progress",
-      });
+      // Auto-fail runs stuck for more than 10 minutes
+      const ageMs = Date.now() - new Date(existingRun.startedAt).getTime();
+      if (ageMs > 10 * 60 * 1000) {
+        await prisma.agentRun.update({
+          where: { id: existingRun.id },
+          data: {
+            status: "failed",
+            errorMessage: "Run timed out (exceeded 10 minutes)",
+            completedAt: new Date(),
+          },
+        });
+      } else {
+        return NextResponse.json({
+          runId: existingRun.id,
+          status: "running",
+          message: "A run is already in progress",
+        });
+      }
     }
 
     // Create agent run record upfront so we can return the ID immediately

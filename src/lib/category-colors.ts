@@ -1,0 +1,18 @@
+export const categoryColors: Record<string, string> = {
+  "approval": "border-purple-400 text-purple-700 bg-purple-50",
+  "reply-needed": "border-amber-400 text-amber-700 bg-amber-50",
+  "task": "border-orange-400 text-orange-700 bg-orange-50",
+  "meeting": "border-blue-400 text-blue-700 bg-blue-50",
+  "fyi": "border-gray-400 text-gray-600 bg-gray-50",
+  "personal": "border-green-400 text-green-700 bg-green-50",
+  "support": "border-teal-400 text-teal-700 bg-teal-50",
+  "finance": "border-emerald-400 text-emerald-700 bg-emerald-50",
+  "travel": "border-sky-400 text-sky-700 bg-sky-50",
+  "shipping": "border-indigo-400 text-indigo-700 bg-indigo-50",
+  "security": "border-red-300 text-red-600 bg-red-50",
+  "social": "border-pink-400 text-pink-700 bg-pink-50",
+  "notification": "border-slate-300 text-slate-600 bg-slate-50",
+  "newsletter": "border-cyan-400 text-cyan-700 bg-cyan-50",
+  "marketing": "border-fuchsia-400 text-fuchsia-700 bg-fuchsia-50",
+  "spam": "border-gray-300 text-gray-500 bg-gray-100",
+};

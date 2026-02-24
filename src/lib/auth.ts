@@ -49,23 +49,26 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
       return session;
     },
+  },
+  events: {
     async signIn({ user, account }) {
-      if (!account || !user.email) return true;
+      // This event fires AFTER the adapter has created/updated the user and account,
+      // so user.id is guaranteed to be available
+      if (!account || !user.email || !user.id) return;
 
-      // After sign in, create or update EmailAccount for email API access
       const provider = account.provider === "google" ? "gmail" : "outlook";
 
       try {
         await prisma.emailAccount.upsert({
           where: {
             userId_provider_email: {
-              userId: user.id!,
+              userId: user.id,
               provider,
               email: user.email,
             },
           },
           create: {
-            userId: user.id!,
+            userId: user.id,
             provider,
             email: user.email,
             accessToken: account.access_token ?? "",
@@ -86,8 +89,6 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       } catch (error) {
         console.error("Failed to create EmailAccount:", error);
       }
-
-      return true;
     },
   },
   pages: {

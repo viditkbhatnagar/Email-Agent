@@ -1,12 +1,13 @@
 "use client";
 
-import { useQuery } from "@tanstack/react-query";
+import { useQuery, useInfiniteQuery } from "@tanstack/react-query";
 import type { EmailFilterParams, DashboardStats } from "@/types";
 
 interface EmailListItem {
   id: string;
   from: string;
   fromName: string | null;
+  to: string[];
   subject: string;
   snippet: string | null;
   receivedAt: string;
@@ -59,28 +60,38 @@ interface EmailsResponse {
   stats?: DashboardStats;
 }
 
-export function useEmails(params?: EmailFilterParams) {
-  return useQuery<EmailsResponse>({
-    queryKey: ["emails", params],
-    queryFn: async () => {
-      const searchParams = new URLSearchParams();
-      if (params?.cursor) searchParams.set("cursor", params.cursor);
-      if (params?.limit) searchParams.set("limit", params.limit.toString());
-      if (params?.priority?.length)
-        searchParams.set("priority", params.priority.join(","));
-      if (params?.category) searchParams.set("category", params.category);
-      if (params?.accountId) searchParams.set("accountId", params.accountId);
-      if (params?.dateFrom) searchParams.set("dateFrom", params.dateFrom);
-      if (params?.dateTo) searchParams.set("dateTo", params.dateTo);
-      if (params?.search) searchParams.set("search", params.search);
-      if (params?.actionableOnly) searchParams.set("actionableOnly", "true");
-      if (params?.threadId) searchParams.set("threadId", params.threadId);
-      searchParams.set("includeStats", "true");
+function buildSearchParams(params?: EmailFilterParams, cursor?: string) {
+  const searchParams = new URLSearchParams();
+  if (cursor) searchParams.set("cursor", cursor);
+  if (params?.limit) searchParams.set("limit", params.limit.toString());
+  if (params?.priority?.length)
+    searchParams.set("priority", params.priority.join(","));
+  if (params?.category) searchParams.set("category", params.category);
+  if (params?.accountId) searchParams.set("accountId", params.accountId);
+  if (params?.dateFrom) searchParams.set("dateFrom", params.dateFrom);
+  if (params?.dateTo) searchParams.set("dateTo", params.dateTo);
+  if (params?.search) searchParams.set("search", params.search);
+  if (params?.actionableOnly) searchParams.set("actionableOnly", "true");
+  if (params?.needsReply) searchParams.set("needsReply", "true");
+  if (params?.needsApproval) searchParams.set("needsApproval", "true");
+  if (params?.isThreadActive) searchParams.set("isThreadActive", "true");
+  if (params?.threadId) searchParams.set("threadId", params.threadId);
+  if (params?.folder) searchParams.set("folder", params.folder);
+  searchParams.set("includeStats", "true");
+  return searchParams;
+}
 
+export function useEmails(params?: EmailFilterParams) {
+  return useInfiniteQuery<EmailsResponse>({
+    queryKey: ["emails", params],
+    queryFn: async ({ pageParam }) => {
+      const searchParams = buildSearchParams(params, pageParam as string | undefined);
       const res = await fetch(`/api/emails?${searchParams}`);
       if (!res.ok) throw new Error("Failed to fetch emails");
       return res.json();
     },
+    initialPageParam: undefined as string | undefined,
+    getNextPageParam: (lastPage) => lastPage.cursor ?? undefined,
   });
 }
 

@@ -9,6 +9,7 @@ import { X, Reply, Paperclip, RefreshCw, Loader2 } from "lucide-react";
 import { useEffect, useRef } from "react";
 import { useReclassifyEmail } from "@/hooks/use-agent";
 import { ThreadChain } from "@/components/thread-chain";
+import { categoryColors } from "@/lib/category-colors";
 
 interface EmailDetailData {
   id: string;
@@ -141,7 +142,7 @@ export function EmailDetail({
         </Button>
       </div>
 
-      <ScrollArea className="flex-1">
+      <div className="flex-1 overflow-y-auto">
         <div className="p-4 space-y-4">
           {/* Classification badges + reclassify button */}
           {email.classification && (
@@ -149,7 +150,12 @@ export function EmailDetail({
               {priority && (
                 <Badge variant={priority.variant}>{priority.label}</Badge>
               )}
-              <Badge variant="outline">{email.classification.category}</Badge>
+              <Badge
+                variant="outline"
+                className={categoryColors[email.classification.category] ?? ""}
+              >
+                {email.classification.category}
+              </Badge>
               {email.classification.needsReply && (
                 <Badge variant="destructive" className="bg-amber-500">
                   <Reply className="mr-1 h-3 w-3" /> Needs Reply
@@ -282,7 +288,7 @@ export function EmailDetail({
             )}
           </div>
         </div>
-      </ScrollArea>
+      </div>
     </div>
   );
 }

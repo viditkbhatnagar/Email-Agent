@@ -29,14 +29,26 @@ const priorityOptions = [
 ];
 
 const categoryOptions: { value: EmailCategory; label: string }[] = [
+  // Action-oriented
   { value: "approval", label: "Approval" },
   { value: "reply-needed", label: "Reply Needed" },
+  { value: "task", label: "Task" },
   { value: "meeting", label: "Meeting" },
+  // Informational
   { value: "fyi", label: "FYI" },
-  { value: "newsletter", label: "Newsletter" },
-  { value: "notification", label: "Notification" },
-  { value: "spam", label: "Spam" },
   { value: "personal", label: "Personal" },
+  { value: "support", label: "Support" },
+  // Transactional
+  { value: "finance", label: "Finance" },
+  { value: "travel", label: "Travel" },
+  { value: "shipping", label: "Shipping" },
+  { value: "security", label: "Security" },
+  // Automated / bulk
+  { value: "social", label: "Social" },
+  { value: "notification", label: "Notification" },
+  { value: "newsletter", label: "Newsletter" },
+  { value: "marketing", label: "Marketing" },
+  { value: "spam", label: "Spam" },
 ];
 
 export function FilterBar({

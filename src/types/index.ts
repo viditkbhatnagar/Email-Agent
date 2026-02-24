@@ -1,3 +1,30 @@
+export interface AttachmentMeta {
+  filename: string;
+  mimeType: string;
+  size?: number;
+}
+
+export interface SenderContext {
+  totalEmails: number;
+  lastEmailAt: Date | null;
+  relationship: string | null;
+  avgResponseTime: number | null;
+}
+
+export interface ThreadContext {
+  threadId: string;
+  messageCount: number;
+  participants: string[];
+  latestMessages: {
+    from: string;
+    fromName: string | null;
+    subject: string;
+    snippet: string | null;
+    receivedAt: Date;
+  }[];
+  yourRepliesExist: boolean;
+}
+
 export interface NormalizedEmail {
   externalId: string;
   threadId?: string;
@@ -12,6 +39,7 @@ export interface NormalizedEmail {
   receivedAt: Date;
   isRead: boolean;
   hasAttachments: boolean;
+  attachments?: AttachmentMeta[];
   labels: string[];
 }
 
@@ -47,20 +75,31 @@ export type Priority = 1 | 2 | 3 | 4 | 5;
 export type EmailCategory =
   | "approval"
   | "reply-needed"
+  | "task"
   | "meeting"
   | "fyi"
-  | "newsletter"
+  | "personal"
+  | "support"
+  | "finance"
+  | "travel"
+  | "shipping"
+  | "security"
+  | "social"
   | "notification"
-  | "spam"
-  | "personal";
+  | "newsletter"
+  | "marketing"
+  | "spam";
 
 export type DraftStatus = "pending" | "approved" | "sent" | "discarded";
 
 // Phase 2 types
 
+export type EmailFolder = "inbox" | "sent";
+
 export interface EmailFilterParams {
   cursor?: string;
   limit?: number;
+  folder?: EmailFolder;
   priority?: number[];
   category?: EmailCategory;
   accountId?: string;
@@ -69,6 +108,9 @@ export interface EmailFilterParams {
   search?: string;
   actionableOnly?: boolean;
   threadId?: string;
+  needsReply?: boolean;
+  needsApproval?: boolean;
+  isThreadActive?: boolean;
 }
 
 export interface DashboardStats {
@@ -99,8 +141,14 @@ export interface ClassificationInput {
   subject: string;
   snippet?: string | null;
   bodyText?: string | null;
+  bodyHtml?: string | null;
   receivedAt: Date;
   labels: string[];
+  threadContext?: ThreadContext | null;
+  hasAttachments?: boolean;
+  attachments?: AttachmentMeta[];
+  senderContext?: SenderContext | null;
+  isForwarded?: boolean;
 }
 
 export interface BatchClassificationResult {
