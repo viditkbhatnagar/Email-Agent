@@ -1,0 +1,180 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ============================================
+// NextAuth.js Models
+// ============================================
+
+model User {
+  id            String         @id @default(cuid())
+  name          String?
+  email         String         @unique
+  emailVerified DateTime?
+  image         String?
+  accounts      Account[]
+  sessions      Session[]
+  emailAccounts EmailAccount[]
+  agentRuns     AgentRun[]
+  createdAt     DateTime       @default(now())
+  updatedAt     DateTime       @updatedAt
+}
+
+model Account {
+  id                String  @id @default(cuid())
+  userId            String
+  type              String
+  provider          String
+  providerAccountId String
+  refresh_token     String? @db.Text
+  access_token      String? @db.Text
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String? @db.Text
+  session_state     String?
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@unique([provider, providerAccountId])
+}
+
+model Session {
+  id           String   @id @default(cuid())
+  sessionToken String   @unique
+  userId       String
+  expires      DateTime
+  user         User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+}
+
+model VerificationToken {
+  identifier String
+  token      String   @unique
+  expires    DateTime
+
+  @@unique([identifier, token])
+}
+
+// ============================================
+// Email Models
+// ============================================
+
+model EmailAccount {
+  id           String    @id @default(cuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  provider     String    // "gmail" | "outlook"
+  email        String
+  accessToken  String    @db.Text
+  refreshToken String    @db.Text
+  expiresAt    DateTime?
+  syncCursor   String?   @db.Text // Gmail historyId / Graph deltaLink
+  lastSyncAt   DateTime?
+  isActive     Boolean   @default(true)
+  emails       Email[]
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  @@unique([userId, provider, email])
+  @@index([userId])
+}
+
+model Email {
+  id             String          @id @default(cuid())
+  accountId      String
+  account        EmailAccount    @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  externalId     String
+  threadId       String?
+  from           String
+  fromName       String?
+  to             String[]
+  cc             String[]
+  subject        String          @default("")
+  snippet        String?
+  bodyText       String?         @db.Text
+  bodyHtml       String?         @db.Text
+  receivedAt     DateTime
+  isRead         Boolean         @default(false)
+  hasAttachments Boolean         @default(false)
+  labels         String[]
+  classification Classification?
+  drafts         Draft[]
+  createdAt      DateTime        @default(now())
+
+  @@unique([accountId, externalId])
+  @@index([accountId, receivedAt(sort: Desc)])
+  @@index([threadId])
+  @@index([from])
+}
+
+model Classification {
+  id             String   @id @default(cuid())
+  emailId        String   @unique
+  email          Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  priority       Int      // 1=Immediate, 2=Important, 3=Moderate, 4=Low, 5=Noise
+  category       String   // "approval", "reply-needed", "meeting", "fyi", "newsletter", "notification", "spam", "personal"
+  needsReply     Boolean  @default(false)
+  needsApproval  Boolean  @default(false)
+  isThreadActive Boolean  @default(false)
+  actionItems    Json?    // [{description: string, dueDate?: string}]
+  summary        String?
+  confidence     Float?
+  userOverride   Boolean  @default(false)
+  classifiedAt   DateTime @default(now())
+
+  @@index([priority])
+  @@index([category])
+}
+
+model Draft {
+  id        String   @id @default(cuid())
+  emailId   String
+  email     Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  subject   String
+  body      String   @db.Text
+  tone      String?  // "professional", "casual", "formal"
+  status    String   @default("pending") // "pending", "approved", "sent", "discarded"
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  @@index([emailId])
+  @@index([status])
+}
+
+model AgentRun {
+  id               String    @id @default(cuid())
+  userId           String
+  user             User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trigger          String    // "manual" | "cron"
+  status           String    // "running", "completed", "failed"
+  emailsFetched    Int       @default(0)
+  emailsClassified Int       @default(0)
+  draftsGenerated  Int       @default(0)
+  errorMessage     String?
+  startedAt        DateTime  @default(now())
+  completedAt      DateTime?
+
+  @@index([userId, startedAt(sort: Desc)])
+}
+
+model SenderProfile {
+  id              String    @id @default(cuid())
+  userId          String
+  senderEmail     String
+  senderName      String?
+  totalEmails     Int       @default(0)
+  lastEmailAt     DateTime?
+  avgResponseTime Float?
+  relationship    String?
+  topics          String[]
+  sentiment       String?
+  updatedAt       DateTime  @updatedAt
+
+  @@unique([userId, senderEmail])
+  @@index([userId])
+}
