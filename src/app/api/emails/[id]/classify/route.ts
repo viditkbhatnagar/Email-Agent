@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from "next/server";
 import { auth } from "@/lib/auth";
 import { prisma } from "@/lib/prisma";
 import { reclassifySingleEmail } from "@/lib/classifier";
+import { detectFollowUp } from "@/lib/priority";
 import type {
   ClassificationInput,
   ThreadContext,
@@ -33,17 +34,19 @@ export async function PATCH(
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // Fetch user accounts (needed for thread context + isDirectlyAddressed)
+    const userAccounts = await prisma.emailAccount.findMany({
+      where: { userId: session.user.id, isActive: true },
+      select: { email: true, id: true },
+    });
+    const userEmails = new Set(
+      userAccounts.map((a) => a.email.toLowerCase())
+    );
+    const accountIds = userAccounts.map((a) => a.id);
+
     // Fetch thread context
     let threadContext: ThreadContext | null = null;
     if (email.threadId) {
-      const userAccounts = await prisma.emailAccount.findMany({
-        where: { userId: session.user.id, isActive: true },
-        select: { email: true, id: true },
-      });
-      const userEmails = new Set(
-        userAccounts.map((a) => a.email.toLowerCase())
-      );
-      const accountIds = userAccounts.map((a) => a.id);
 
       const threadSiblings = await prisma.email.findMany({
         where: {
@@ -115,6 +118,15 @@ export async function PATCH(
         ? (email.attachments as unknown as AttachmentMeta[])
         : undefined;
 
+    // Compute enrichment signals
+    const isDirectlyAddressed = email.to.some((addr) =>
+      userEmails.has(addr.toLowerCase())
+    );
+    const { isFollowUp, isEscalation } = detectFollowUp(
+      email.subject,
+      email.snippet ?? undefined
+    );
+
     // Build enriched classification input
     const input: ClassificationInput = {
       emailId: email.id,
@@ -133,10 +145,33 @@ export async function PATCH(
       attachments,
       senderContext,
       isForwarded: /^(Fwd?|Fw):/i.test(email.subject),
+      isDirectlyAddressed,
+      isMailingList: email.isMailingList,
+      isFollowUp,
+      isEscalation,
     };
+
+    // Guard: don't auto-reclassify if user has manually overridden
+    const existingClassification = await prisma.classification.findUnique({
+      where: { emailId: email.id },
+      select: { userOverride: true },
+    });
+    if (existingClassification?.userOverride) {
+      return NextResponse.json(
+        { error: "Email has a user override. Use the override endpoint to modify, or clear the override first." },
+        { status: 409 }
+      );
+    }
 
     // Classify
     const result = await reclassifySingleEmail(input);
+
+    // Parse deadline
+    const deadlineDate = result.deadline
+      ? new Date(result.deadline)
+      : null;
+    const validDeadline =
+      deadlineDate && !isNaN(deadlineDate.getTime()) ? deadlineDate : null;
 
     // Upsert classification
     const classification = await prisma.classification.upsert({
@@ -149,8 +184,11 @@ export async function PATCH(
         needsApproval: result.needsApproval,
         isThreadActive: result.isThreadActive,
         actionItems: result.actionItems as unknown as undefined,
+        deadline: validDeadline,
         summary: result.summary,
         confidence: result.confidence,
+        originalPriority: result.priority,
+        originalCategory: result.category,
         userOverride: false,
       },
       update: {
@@ -160,8 +198,11 @@ export async function PATCH(
         needsApproval: result.needsApproval,
         isThreadActive: result.isThreadActive,
         actionItems: result.actionItems as unknown as undefined,
+        deadline: validDeadline,
         summary: result.summary,
         confidence: result.confidence,
+        originalPriority: result.priority,
+        originalCategory: result.category,
         userOverride: false,
         classifiedAt: new Date(),
       },

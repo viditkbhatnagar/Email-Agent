@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
 import { runAgentPipeline } from "@/lib/agent-pipeline";
+import { generateAllDigests } from "@/lib/digest";
 
 export async function POST(req: NextRequest) {
   try {
@@ -45,9 +46,23 @@ export async function POST(req: NextRequest) {
       }
     }
 
+    // --- Generate daily digests after pipeline completes ---
+    let digests: { userId: string; userEmail: string; text: string }[] = [];
+    try {
+      digests = await generateAllDigests();
+      // TODO: Send digests via email (e.g., using a transactional email service).
+      // For now, log them. Each entry has { userId, userEmail, text }.
+      for (const d of digests) {
+        console.log(`[Digest] Generated for ${d.userEmail} (${d.text.length} chars)`);
+      }
+    } catch (digestErr) {
+      console.error("[Digest] Failed to generate digests:", digestErr);
+    }
+
     return NextResponse.json({
       message: "Cron job completed",
       usersProcessed: recentUsers.length,
+      digestsGenerated: digests.length,
       results,
     });
   } catch (error) {

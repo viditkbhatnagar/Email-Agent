@@ -94,6 +94,57 @@ export async function refreshGmailToken(
   };
 }
 
+async function fetchMessagesWithRetry(
+  gmail: ReturnType<typeof google.gmail>,
+  messageIds: string[],
+  chunkSize = 10
+): Promise<NormalizedEmail[]> {
+  const emails: NormalizedEmail[] = [];
+  const failedIds: string[] = [];
+
+  for (let i = 0; i < messageIds.length; i += chunkSize) {
+    const chunk = messageIds.slice(i, i + chunkSize);
+    const results = await Promise.allSettled(
+      chunk.map((msgId) =>
+        gmail.users.messages.get({ userId: "me", id: msgId, format: "full" })
+      )
+    );
+    for (let j = 0; j < results.length; j++) {
+      const result = results[j];
+      if (result.status === "fulfilled") {
+        const normalized = normalizeGmailMessage(result.value.data);
+        if (normalized) emails.push(normalized);
+      } else {
+        failedIds.push(chunk[j]);
+        console.warn(
+          `[Gmail] Failed to fetch message ${chunk[j]}: ${result.reason?.message ?? result.reason}`
+        );
+      }
+    }
+  }
+
+  if (failedIds.length > 0) {
+    console.log(`[Gmail] Retrying ${failedIds.length} failed message fetches...`);
+    for (const msgId of failedIds) {
+      try {
+        const res = await gmail.users.messages.get({
+          userId: "me",
+          id: msgId,
+          format: "full",
+        });
+        const normalized = normalizeGmailMessage(res.data);
+        if (normalized) emails.push(normalized);
+        console.log(`[Gmail] Retry succeeded for message ${msgId}`);
+      } catch (retryErr: unknown) {
+        const errMsg = retryErr instanceof Error ? retryErr.message : String(retryErr);
+        console.error(`[Gmail] Permanent failure for message ${msgId} after retry: ${errMsg}`);
+      }
+    }
+  }
+
+  return emails;
+}
+
 export async function fetchGmailEmails(
   accessToken: string,
   refreshToken: string,
@@ -134,19 +185,8 @@ export async function fetchGmailEmails(
 
       console.log(`[Gmail] Incremental sync found ${messageIds.size} new messages`);
 
-      for (const msgId of messageIds) {
-        try {
-          const msg = await gmail.users.messages.get({
-            userId: "me",
-            id: msgId,
-            format: "full",
-          });
-          const normalized = normalizeGmailMessage(msg.data);
-          if (normalized) emails.push(normalized);
-        } catch (err) {
-          console.error(`Failed to fetch Gmail message ${msgId}:`, err);
-        }
-      }
+      const incrementalEmails = await fetchMessagesWithRetry(gmail, [...messageIds]);
+      emails.push(...incrementalEmails);
 
       return {
         emails,
@@ -186,25 +226,29 @@ export async function fetchGmailEmails(
     const messages = listRes.data.messages ?? [];
     console.log(`[Gmail] Listed ${messages.length} messages (total so far: ${emails.length})`);
 
-    for (const m of messages) {
-      try {
-        const msg = await gmail.users.messages.get({
-          userId: "me",
-          id: m.id!,
-          format: "full",
-        });
-        const normalized = normalizeGmailMessage(msg.data);
-        if (normalized) emails.push(normalized);
-      } catch (err) {
-        console.error(`[Gmail] Failed to fetch message ${m.id}:`, err);
-      }
-    }
+    const chunkIds = messages.map((m) => m.id!).filter(Boolean);
+    const pageEmails = await fetchMessagesWithRetry(gmail, chunkIds);
+    emails.push(...pageEmails);
 
     console.log(`[Gmail] Fetched ${emails.length} emails so far`);
     pageToken = listRes.data.nextPageToken ?? undefined;
   } while (pageToken);
 
   return { emails, newSyncCursor };
+}
+
+function detectMailingList(
+  headers: { name?: string | null; value?: string | null }[] | undefined
+): { isMailingList: boolean; listId?: string } {
+  const listId = getHeader(headers, "List-Id");
+  if (listId) return { isMailingList: true, listId };
+  if (getHeader(headers, "List-Unsubscribe")) return { isMailingList: true };
+  const precedence = getHeader(headers, "Precedence").toLowerCase();
+  if (precedence === "bulk" || precedence === "list") return { isMailingList: true };
+  if (getHeader(headers, "X-Campaign-Id") || getHeader(headers, "X-Mailer-RecptId")) {
+    return { isMailingList: true };
+  }
+  return { isMailingList: false };
 }
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
@@ -215,6 +259,7 @@ function normalizeGmailMessage(msg: any): NormalizedEmail | null {
   const fromRaw = getHeader(headers, "From");
   const parsed = parseEmailAddress(fromRaw);
   const { text, html, attachments, hasAttachments } = extractEmailContent(msg.payload);
+  const mailingList = detectMailingList(headers);
 
   return {
     externalId: msg.id,
@@ -234,5 +279,7 @@ function normalizeGmailMessage(msg: any): NormalizedEmail | null {
     hasAttachments,
     attachments: attachments.length > 0 ? attachments : undefined,
     labels: msg.labelIds ?? [],
+    isMailingList: mailingList.isMailingList,
+    listId: mailingList.listId,
   };
 }

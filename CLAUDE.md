@@ -72,6 +72,15 @@ Schema at `prisma/schema.prisma`. Key models: `User`, `EmailAccount`, `Email` (u
 
 Priority levels P1 (Immediate) through P5 (Noise). Category stored as `String` in Prisma — no migration needed when adding/removing categories. The `EmailCategory` type union in `src/types/index.ts` is the source of truth for TypeScript.
 
+### Dynamic Priority (Deadline-Aware)
+GPT extracts a `deadline` (ISO date) during classification — e.g., bill due dates, task deadlines, event dates. The API computes `effectivePriority` at query time based on deadline proximity:
+- Overdue or ≤ 2 days → P1
+- 3–6 days → P2
+- 7–14 days → P3
+- > 14 days → stored priority (no escalation)
+
+`effectivePriority = min(storedPriority, deadlinePriority)` — never de-escalates below what GPT assigned. Shared logic in `src/lib/priority.ts`, consumed by both `/api/emails` and `/api/emails/[id]`.
+
 ## Environment Variables
 `DATABASE_URL`, `NEXTAUTH_SECRET`, `NEXTAUTH_URL`, `GOOGLE_CLIENT_ID`, `GOOGLE_CLIENT_SECRET`, `AZURE_CLIENT_ID`, `AZURE_CLIENT_SECRET`, `OPENAI_API_KEY`, `CRON_SECRET`
 

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef } from "react";
+import { useEffect } from "react";
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 import { toast } from "sonner";
 import type { AgentRunStatus } from "@/types";
@@ -129,7 +129,10 @@ export function useReclassifyEmail() {
       const res = await fetch(`/api/emails/${emailId}/classify`, {
         method: "PATCH",
       });
-      if (!res.ok) throw new Error("Failed to reclassify");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to reclassify");
+      }
       return res.json();
     },
     onSuccess: (_, emailId) => {
@@ -137,8 +140,139 @@ export function useReclassifyEmail() {
       queryClient.invalidateQueries({ queryKey: ["email", emailId] });
       queryClient.invalidateQueries({ queryKey: ["emails"] });
     },
+    onError: (error) => {
+      toast.error(error.message || "Failed to reclassify email");
+    },
+  });
+}
+
+export function useHandleEmail() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    unknown,
+    Error,
+    { emailId: string; handled: boolean }
+  >({
+    mutationFn: async ({ emailId, handled }) => {
+      const res = await fetch(`/api/emails/${emailId}/handle`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ handled }),
+      });
+      if (!res.ok) throw new Error("Failed to update handled state");
+      return res.json();
+    },
+    onSuccess: (_, { emailId, handled }) => {
+      toast.success(handled ? "Marked as handled" : "Reopened");
+      queryClient.invalidateQueries({ queryKey: ["email", emailId] });
+      queryClient.invalidateQueries({ queryKey: ["emails"] });
+    },
     onError: () => {
-      toast.error("Failed to reclassify email");
+      toast.error("Failed to update email");
+    },
+  });
+}
+
+export function useOverrideClassification() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    unknown,
+    Error,
+    {
+      emailId: string;
+      priority?: number;
+      category?: string;
+      needsReply?: boolean;
+      needsApproval?: boolean;
+      deadline?: string | null;
+    }
+  >({
+    mutationFn: async ({ emailId, ...overrideData }) => {
+      const res = await fetch(`/api/emails/${emailId}/override`, {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(overrideData),
+      });
+      if (!res.ok) throw new Error("Failed to override classification");
+      return res.json();
+    },
+    onSuccess: (_, { emailId }) => {
+      toast.success("Classification updated");
+      queryClient.invalidateQueries({ queryKey: ["email", emailId] });
+      queryClient.invalidateQueries({ queryKey: ["emails"] });
+    },
+    onError: () => {
+      toast.error("Failed to update classification");
+    },
+  });
+}
+
+export function useToggleVip() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    unknown,
+    Error,
+    { senderEmail: string; isVip: boolean }
+  >({
+    mutationFn: async ({ senderEmail, isVip }) => {
+      const res = await fetch(
+        `/api/senders/${encodeURIComponent(senderEmail)}`,
+        {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ isVip }),
+        }
+      );
+      if (!res.ok) throw new Error("Failed to update VIP status");
+      return res.json();
+    },
+    onSuccess: (_, { isVip }) => {
+      toast.success(isVip ? "Marked as VIP" : "Removed VIP status");
+      queryClient.invalidateQueries({ queryKey: ["emails"] });
+      // Invalidate all email detail queries since VIP affects priority
+      queryClient.invalidateQueries({ queryKey: ["email"] });
+    },
+    onError: () => {
+      toast.error("Failed to update VIP status");
+    },
+  });
+}
+
+export function useBulkAction() {
+  const queryClient = useQueryClient();
+
+  return useMutation<
+    { updated: number; requested: number },
+    Error,
+    {
+      emailIds: string[];
+      action: "handle" | "unhandle" | "override";
+      overrideData?: {
+        priority?: number;
+        category?: string;
+        needsReply?: boolean;
+        needsApproval?: boolean;
+      };
+    }
+  >({
+    mutationFn: async (data) => {
+      const res = await fetch("/api/emails/bulk", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(data),
+      });
+      if (!res.ok) throw new Error("Failed to process bulk action");
+      return res.json();
+    },
+    onSuccess: (result) => {
+      toast.success(`Updated ${result.updated} emails`);
+      queryClient.invalidateQueries({ queryKey: ["emails"] });
+    },
+    onError: () => {
+      toast.error("Failed to process bulk action");
     },
   });
 }

@@ -19,10 +19,14 @@ interface EmailListItem {
   };
   classification?: {
     priority: number;
+    effectivePriority: number;
     category: string;
     summary: string | null;
     needsReply: boolean;
     needsApproval: boolean;
+    deadline: string | null;
+    handled: boolean;
+    userOverride: boolean;
   } | null;
 }
 
@@ -39,17 +43,24 @@ interface EmailDetail {
   receivedAt: string;
   isRead: boolean;
   hasAttachments: boolean;
+  isVipSender?: boolean;
   account: {
     provider: string;
     email: string;
   };
   classification?: {
     priority: number;
+    effectivePriority: number;
     category: string;
     summary: string | null;
     needsReply: boolean;
     needsApproval: boolean;
+    isThreadActive: boolean;
     actionItems: { description: string; dueDate?: string }[] | null;
+    deadline: string | null;
+    handled: boolean;
+    userOverride: boolean;
+    confidence: number | null;
   } | null;
 }
 
@@ -57,6 +68,7 @@ interface EmailsResponse {
   emails: EmailListItem[];
   total: number;
   cursor?: string;
+  page?: number;
   stats?: DashboardStats;
 }
 
@@ -77,6 +89,13 @@ function buildSearchParams(params?: EmailFilterParams, cursor?: string) {
   if (params?.isThreadActive) searchParams.set("isThreadActive", "true");
   if (params?.threadId) searchParams.set("threadId", params.threadId);
   if (params?.folder) searchParams.set("folder", params.folder);
+  if (params?.showHandled) searchParams.set("showHandled", "true");
+  if (params?.sortBy) searchParams.set("sortBy", params.sortBy);
+  if (params?.page !== undefined) searchParams.set("page", params.page.toString());
+  if (params?.vipOnly) searchParams.set("vipOnly", "true");
+  if (params?.hasDeadline) searchParams.set("hasDeadline", "true");
+  if (params?.lowConfidence) searchParams.set("lowConfidence", "true");
+  if (params?.isMailingList) searchParams.set("isMailingList", "true");
   searchParams.set("includeStats", "true");
   return searchParams;
 }

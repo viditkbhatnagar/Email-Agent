@@ -11,7 +11,7 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { Badge } from "@/components/ui/badge";
-import { Search, X, Filter } from "lucide-react";
+import { Search, X, Filter, ArrowUpDown, Eye, Star, Calendar, AlertCircle, Mail } from "lucide-react";
 import type { EmailFilterParams, EmailCategory } from "@/types";
 
 interface FilterBarProps {
@@ -83,7 +83,13 @@ export function FilterBar({
     filters.category ||
     filters.accountId ||
     filters.search ||
-    filters.actionableOnly
+    filters.actionableOnly ||
+    filters.showHandled ||
+    filters.sortBy === "priority" ||
+    filters.vipOnly ||
+    filters.hasDeadline ||
+    filters.lowConfidence ||
+    filters.isMailingList
   );
 
   const handleSearchSubmit = () => {
@@ -92,8 +98,8 @@ export function FilterBar({
 
   return (
     <div className="space-y-2 border-b px-4 py-3">
-      {/* Top row: search + category + account + actionable toggle */}
-      <div className="flex items-center gap-2">
+      {/* Top row: search + category + account + toggles */}
+      <div className="flex items-center gap-2 flex-wrap">
         <div className="relative flex-1 max-w-xs">
           <Search className="absolute left-2.5 top-1/2 -translate-y-1/2 h-3.5 w-3.5 text-muted-foreground" />
           <Input
@@ -154,7 +160,82 @@ export function FilterBar({
           }
         >
           <Filter className="h-3 w-3" />
-          Actionable Only
+          Actionable
+        </Button>
+
+        <Button
+          variant={filters.sortBy === "priority" ? "default" : "outline"}
+          size="sm"
+          className="text-xs gap-1.5 h-8"
+          onClick={() =>
+            updateFilter(
+              "sortBy",
+              filters.sortBy === "priority" ? undefined : "priority"
+            )
+          }
+        >
+          <ArrowUpDown className="h-3 w-3" />
+          {filters.sortBy === "priority" ? "By Priority" : "By Date"}
+        </Button>
+
+        <Button
+          variant={filters.showHandled ? "default" : "outline"}
+          size="sm"
+          className="text-xs gap-1.5 h-8"
+          onClick={() =>
+            updateFilter("showHandled", !filters.showHandled || undefined)
+          }
+        >
+          <Eye className="h-3 w-3" />
+          Handled
+        </Button>
+
+        <Button
+          variant={filters.vipOnly ? "default" : "outline"}
+          size="sm"
+          className="text-xs gap-1.5 h-8"
+          onClick={() =>
+            updateFilter("vipOnly", !filters.vipOnly || undefined)
+          }
+        >
+          <Star className="h-3 w-3" />
+          VIP
+        </Button>
+
+        <Button
+          variant={filters.hasDeadline ? "default" : "outline"}
+          size="sm"
+          className="text-xs gap-1.5 h-8"
+          onClick={() =>
+            updateFilter("hasDeadline", !filters.hasDeadline || undefined)
+          }
+        >
+          <Calendar className="h-3 w-3" />
+          Deadline
+        </Button>
+
+        <Button
+          variant={filters.lowConfidence ? "default" : "outline"}
+          size="sm"
+          className="text-xs gap-1.5 h-8"
+          onClick={() =>
+            updateFilter("lowConfidence", !filters.lowConfidence || undefined)
+          }
+        >
+          <AlertCircle className="h-3 w-3" />
+          Uncertain
+        </Button>
+
+        <Button
+          variant={filters.isMailingList ? "default" : "outline"}
+          size="sm"
+          className="text-xs gap-1.5 h-8"
+          onClick={() =>
+            updateFilter("isMailingList", !filters.isMailingList || undefined)
+          }
+        >
+          <Mail className="h-3 w-3" />
+          Lists
         </Button>
 
         {hasActiveFilters && (

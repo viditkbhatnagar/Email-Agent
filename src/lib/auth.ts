@@ -4,6 +4,16 @@ import MicrosoftEntraId from "next-auth/providers/microsoft-entra-id";
 import { PrismaAdapter } from "@auth/prisma-adapter";
 import { prisma } from "@/lib/prisma";
 
+// Free email providers whose domains should NOT be treated as "company" domains
+const FREE_EMAIL_DOMAINS = new Set([
+  "gmail.com", "googlemail.com", "outlook.com", "hotmail.com",
+  "live.com", "msn.com", "yahoo.com", "yahoo.co.in", "yahoo.co.uk",
+  "aol.com", "icloud.com", "me.com", "mac.com", "mail.com",
+  "protonmail.com", "proton.me", "zoho.com", "yandex.com",
+  "tutanota.com", "fastmail.com", "gmx.com", "gmx.net",
+  "rediffmail.com", "qq.com", "163.com", "126.com",
+]);
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   adapter: PrismaAdapter(prisma),
   providers: [
@@ -86,6 +96,20 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
             isActive: true,
           },
         });
+        // Auto-detect company domain from user's email if not already set
+        const domain = user.email!.split("@")[1]?.toLowerCase();
+        if (domain && !FREE_EMAIL_DOMAINS.has(domain)) {
+          const existingUser = await prisma.user.findUnique({
+            where: { id: user.id },
+            select: { companyDomains: true },
+          });
+          if (existingUser && existingUser.companyDomains.length === 0) {
+            await prisma.user.update({
+              where: { id: user.id },
+              data: { companyDomains: [domain] },
+            });
+          }
+        }
       } catch (error) {
         console.error("Failed to create EmailAccount:", error);
       }

@@ -12,17 +12,21 @@ datasource db {
 // ============================================
 
 model User {
-  id            String         @id @default(cuid())
-  name          String?
-  email         String         @unique
-  emailVerified DateTime?
-  image         String?
-  accounts      Account[]
-  sessions      Session[]
-  emailAccounts EmailAccount[]
-  agentRuns     AgentRun[]
-  createdAt     DateTime       @default(now())
-  updatedAt     DateTime       @updatedAt
+  id             String         @id @default(cuid())
+  name           String?
+  email          String         @unique
+  emailVerified  DateTime?
+  image          String?
+  accounts       Account[]
+  sessions       Session[]
+  emailAccounts  EmailAccount[]
+  agentRuns      AgentRun[]
+  rules          UserRule[]
+  autoActions    AutoAction[]
+  companyDomains String[]
+  dailyDigestEnabled Boolean    @default(false)
+  createdAt      DateTime       @default(now())
+  updatedAt      DateTime       @updatedAt
 }
 
 model Account {
@@ -103,6 +107,8 @@ model Email {
   hasAttachments Boolean         @default(false)
   attachments    Json?           // [{filename, mimeType, size}]
   labels         String[]
+  isMailingList  Boolean         @default(false)
+  listId         String?
   classification Classification?
   drafts         Draft[]
   createdAt      DateTime        @default(now())
@@ -114,22 +120,48 @@ model Email {
 }
 
 model Classification {
-  id             String   @id @default(cuid())
-  emailId        String   @unique
-  email          Email    @relation(fields: [emailId], references: [id], onDelete: Cascade)
-  priority       Int      // 1=Immediate, 2=Important, 3=Moderate, 4=Low, 5=Noise
-  category       String   // "approval", "reply-needed", "meeting", "fyi", "newsletter", "notification", "spam", "personal"
-  needsReply     Boolean  @default(false)
-  needsApproval  Boolean  @default(false)
-  isThreadActive Boolean  @default(false)
-  actionItems    Json?    // [{description: string, dueDate?: string}]
+  id             String    @id @default(cuid())
+  emailId        String    @unique
+  email          Email     @relation(fields: [emailId], references: [id], onDelete: Cascade)
+  priority       Int       // 1=Immediate, 2=Important, 3=Moderate, 4=Low, 5=Noise
+  category       String    // "approval", "reply-needed", "task", "meeting", "fyi", "personal", "support", "finance", "travel", "shipping", "security", "social", "notification", "newsletter", "marketing", "spam"
+  needsReply     Boolean   @default(false)
+  needsApproval  Boolean   @default(false)
+  isThreadActive Boolean   @default(false)
+  actionItems    Json?     // [{description: string, dueDate?: string}]
+  deadline       DateTime? // Earliest actionable deadline extracted from email (bill due date, task due date, etc.)
   summary        String?
   confidence     Float?
-  userOverride   Boolean  @default(false)
-  classifiedAt   DateTime @default(now())
+  classifierVersion String?
+  originalPriority  Int?      // GPT's initial priority (preserved across user overrides)
+  originalCategory  String?   // GPT's initial category (preserved across user overrides)
+  userOverride   Boolean   @default(false)
+  handled        Boolean   @default(false)
+  handledAt      DateTime?
+  threadResolved Boolean   @default(false)
+  snoozedUntil   DateTime?
+  topics         String[]  // 1-3 topic tags extracted by classifier
+  sentiment      String?   // "positive", "neutral", "negative", "urgent"
+  classifiedAt   DateTime  @default(now())
 
   @@index([priority])
   @@index([category])
+  @@index([deadline])
+  @@index([handled])
+  @@index([snoozedUntil])
+}
+
+model ClassificationHistory {
+  id                String   @id @default(cuid())
+  emailId           String
+  priority          Int
+  category          String
+  confidence        Float?
+  classifierVersion String?
+  reason            String?  // "initial", "hot-thread", "user-override", "re-classify", "user-rule"
+  createdAt         DateTime @default(now())
+
+  @@index([emailId, createdAt(sort: Desc)])
 }
 
 model Draft {
@@ -172,10 +204,53 @@ model SenderProfile {
   lastEmailAt     DateTime?
   avgResponseTime Float?
   relationship    String?
+  isVip           Boolean   @default(false)
+  vipReason       String?
   topics          String[]
   sentiment       String?
+  recentEmailCount Int      @default(0)
+  recentWindowStart DateTime?
+  overrideCount   Int       @default(0)
   updatedAt       DateTime  @updatedAt
 
   @@unique([userId, senderEmail])
   @@index([userId])
+}
+
+model UserRule {
+  id             String   @id @default(cuid())
+  userId         String
+  user           User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  name           String
+  isActive       Boolean  @default(true)
+  // Conditions (all non-null conditions must match)
+  senderPattern  String?  // glob-like pattern: "*@jira.company.com", "newsletter@*"
+  subjectPattern String?  // substring match (case-insensitive)
+  isMailingList  Boolean?
+  hasAttachments Boolean?
+  // Actions
+  category       String?
+  priority       Int?
+  needsReply     Boolean?
+  autoHandle     Boolean? // auto-mark as handled (archive)
+  // Metadata
+  matchCount     Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  @@index([userId, isActive])
+}
+
+model AutoAction {
+  id          String   @id @default(cuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  trigger     String   // "priority:5", "category:spam", "category:newsletter"
+  action      String   // "handle", "archive", "mute-thread"
+  isActive    Boolean  @default(true)
+  matchCount  Int      @default(0)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  @@index([userId, isActive])
 }

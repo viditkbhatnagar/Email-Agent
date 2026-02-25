@@ -71,12 +71,38 @@ interface GraphMessage {
     contentType?: string;
     size?: number;
   }>;
+  internetMessageHeaders?: Array<{
+    name?: string;
+    value?: string;
+  }>;
 }
 
 interface GraphDeltaResponse {
   value: GraphMessage[];
   "@odata.nextLink"?: string;
   "@odata.deltaLink"?: string;
+}
+
+function getOutlookHeader(
+  headers: Array<{ name?: string; value?: string }> | undefined,
+  name: string
+): string {
+  if (!headers) return "";
+  const header = headers.find(
+    (h) => h.name?.toLowerCase() === name.toLowerCase()
+  );
+  return header?.value ?? "";
+}
+
+function detectOutlookMailingList(
+  headers: Array<{ name?: string; value?: string }> | undefined
+): { isMailingList: boolean; listId?: string } {
+  const listId = getOutlookHeader(headers, "List-Id");
+  if (listId) return { isMailingList: true, listId };
+  if (getOutlookHeader(headers, "List-Unsubscribe")) return { isMailingList: true };
+  const precedence = getOutlookHeader(headers, "Precedence").toLowerCase();
+  if (precedence === "bulk" || precedence === "list") return { isMailingList: true };
+  return { isMailingList: false };
 }
 
 function normalizeOutlookMessage(msg: GraphMessage): NormalizedEmail {
@@ -86,6 +112,8 @@ function normalizeOutlookMessage(msg: GraphMessage): NormalizedEmail {
       mimeType: a.contentType || "application/octet-stream",
       size: a.size,
     }));
+
+  const mailingList = detectOutlookMailingList(msg.internetMessageHeaders);
 
   return {
     externalId: msg.id,
@@ -111,6 +139,8 @@ function normalizeOutlookMessage(msg: GraphMessage): NormalizedEmail {
     hasAttachments: msg.hasAttachments ?? false,
     attachments: attachments && attachments.length > 0 ? attachments : undefined,
     labels: ["INBOX", ...(msg.categories ?? [])],
+    isMailingList: mailingList.isMailingList,
+    listId: mailingList.listId,
   };
 }
 
@@ -144,7 +174,11 @@ export async function fetchOutlookEmails(
           .get();
 
         for (const msg of response.value) {
-          emails.push(normalizeOutlookMessage(msg));
+          try {
+            emails.push(normalizeOutlookMessage(msg));
+          } catch (err) {
+            console.error(`[Outlook] Failed to normalize message ${msg.id}: ${err instanceof Error ? err.message : err}`);
+          }
         }
 
         nextLink = response["@odata.nextLink"];
@@ -167,14 +201,18 @@ export async function fetchOutlookEmails(
   ).toISOString();
 
   let nextLink: string | undefined =
-    `/me/mailFolders/inbox/messages/delta?$filter=receivedDateTime ge ${thirtyDaysAgo}&$select=id,conversationId,from,toRecipients,ccRecipients,subject,bodyPreview,body,receivedDateTime,isRead,hasAttachments,categories&$expand=attachments($select=name,contentType,size)&$top=50`;
+    `/me/mailFolders/inbox/messages/delta?$filter=receivedDateTime ge ${thirtyDaysAgo}&$select=id,conversationId,from,toRecipients,ccRecipients,subject,bodyPreview,body,receivedDateTime,isRead,hasAttachments,categories,internetMessageHeaders&$expand=attachments($select=name,contentType,size)&$top=50`;
   let deltaLink: string | undefined;
 
   while (nextLink) {
     const response: GraphDeltaResponse = await client.api(nextLink).get();
 
     for (const msg of response.value) {
-      emails.push(normalizeOutlookMessage(msg));
+      try {
+        emails.push(normalizeOutlookMessage(msg));
+      } catch (err) {
+        console.error(`[Outlook] Failed to normalize message ${msg.id}: ${err instanceof Error ? err.message : err}`);
+      }
     }
 
     nextLink = response["@odata.nextLink"];

@@ -123,11 +123,15 @@ export async function syncEmailAccount(
           hasAttachments: email.hasAttachments,
           attachments: email.attachments ? (email.attachments as object[]) : undefined,
           labels: email.labels,
+          isMailingList: email.isMailingList ?? false,
+          listId: email.listId,
         },
         update: {
           isRead: email.isRead,
           labels: email.labels,
           receivedAt: email.receivedAt,
+          isMailingList: email.isMailingList ?? false,
+          listId: email.listId,
         },
       });
       stored++;

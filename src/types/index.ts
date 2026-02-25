@@ -9,6 +9,8 @@ export interface SenderContext {
   lastEmailAt: Date | null;
   relationship: string | null;
   avgResponseTime: number | null;
+  recentEmailCount?: number;
+  isVip?: boolean;
 }
 
 export interface ThreadContext {
@@ -23,6 +25,8 @@ export interface ThreadContext {
     receivedAt: Date;
   }[];
   yourRepliesExist: boolean;
+  isReplyToYou?: boolean;
+  threadFatigueDetected?: boolean;
 }
 
 export interface NormalizedEmail {
@@ -41,6 +45,8 @@ export interface NormalizedEmail {
   hasAttachments: boolean;
   attachments?: AttachmentMeta[];
   labels: string[];
+  isMailingList?: boolean;
+  listId?: string;
 }
 
 export interface SyncResult {
@@ -55,8 +61,11 @@ export interface ClassificationResult {
   needsApproval: boolean;
   isThreadActive: boolean;
   actionItems: { description: string; dueDate?: string }[];
+  deadline: string | null;
   summary: string;
   confidence: number;
+  topics?: string[];
+  sentiment?: string;
 }
 
 export interface AgentRunResult {
@@ -111,6 +120,13 @@ export interface EmailFilterParams {
   needsReply?: boolean;
   needsApproval?: boolean;
   isThreadActive?: boolean;
+  showHandled?: boolean;
+  sortBy?: "date" | "priority";
+  page?: number;
+  vipOnly?: boolean;
+  hasDeadline?: boolean;
+  lowConfidence?: boolean;
+  isMailingList?: boolean;
 }
 
 export interface DashboardStats {
@@ -118,6 +134,8 @@ export interface DashboardStats {
   needsApproval: number;
   activeThreads: number;
   unclassified: number;
+  categoryCounts: Record<string, number>;
+  priorityCounts?: Record<number, number>;
 }
 
 export interface AgentRunStatus {
@@ -149,6 +167,11 @@ export interface ClassificationInput {
   attachments?: AttachmentMeta[];
   senderContext?: SenderContext | null;
   isForwarded?: boolean;
+  isDirectlyAddressed?: boolean;
+  isMailingList?: boolean;
+  isFollowUp?: boolean;
+  isEscalation?: boolean;
+  recipientCount?: number;
 }
 
 export interface BatchClassificationResult {

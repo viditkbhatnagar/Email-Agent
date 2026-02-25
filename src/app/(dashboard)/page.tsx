@@ -42,6 +42,22 @@ export default function InboxPage() {
 
   const handleSummaryCardClick = useCallback((filter: string) => {
     setFolder("inbox");
+
+    // Handle category chip clicks (format: "category:social")
+    if (filter.startsWith("category:")) {
+      const cat = filter.slice("category:".length);
+      setFilters((prev) => ({
+        ...prev,
+        category: cat as EmailFilterParams["category"],
+        needsReply: undefined,
+        needsApproval: undefined,
+        isThreadActive: undefined,
+        actionableOnly: false,
+        priority: undefined,
+      }));
+      return;
+    }
+
     switch (filter) {
       case "needsReply":
         setFilters((prev) => ({
@@ -78,6 +94,17 @@ export default function InboxPage() {
         break;
       case "unclassified":
         setFilters({ limit: 50 });
+        break;
+      case "urgent":
+        setFilters((prev) => ({
+          ...prev,
+          priority: [1, 2],
+          needsReply: undefined,
+          needsApproval: undefined,
+          isThreadActive: undefined,
+          actionableOnly: false,
+          category: undefined,
+        }));
         break;
     }
   }, []);
